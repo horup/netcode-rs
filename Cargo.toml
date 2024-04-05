@@ -8,11 +8,14 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-serde = {workspace = true}
+client = {path = "client"}
+server = {path = "server"}
 
 [workspace.dependencies]
 hyper = {version = "1.1", features = ["server", "http1"]}
 hyper-tungstenite = "0.13"
 tokio = {version = "1.36", features = ["full"]}
+tokio-test = "0.4.4"
+tokio-util = "0.7.10"
 serde = {version = "1.0", features = ["derive"]}
 bincode = "1.3"

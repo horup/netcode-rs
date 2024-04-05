@@ -4,4 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-netcode = {path = ".."}
+common = {path="../common"}
+tokio = {workspace = true}
+hyper = {workspace = true}
+tokio-util = {workspace = true}
+
+[dev-dependencies]
+tokio-test = {workspace = true}
