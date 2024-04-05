@@ -79,7 +79,6 @@ mod tests {
             assert_eq!(server.start(8080).await, false);
             server.stop().await;
             assert_eq!(server.start(8080).await, true);
-            
         });
     }
 }
