@@ -3,6 +3,13 @@
 version = 3
 
 [[package]]
+name = "common"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "netcode"
 version = "0.1.0"
 dependencies = [
@@ -50,6 +57,9 @@ dependencies = [
 [[package]]
 name = "server"
 version = "0.1.0"
+dependencies = [
+ "netcode",
+]
 
 [[package]]
 name = "syn"
