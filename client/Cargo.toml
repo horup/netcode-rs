@@ -4,3 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+tokio = {workspace = true}
+ewebsock = {workspace = true}
+common = {path = "../common"}
+tokio-util = {workspace = true}
+[dev-dependencies]
+tokio-test = {workspace = true}
