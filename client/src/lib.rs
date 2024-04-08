@@ -139,12 +139,27 @@ impl<T:Message> Client<T> {
         }
     }
 
-    /// Collect events 
+    /// Collect and process events
+    /// 
+    /// Returns the processed events which can be further processed by the calling application 
     pub fn events(&mut self) -> Vec<Event<T>> {
         let mut events = Vec::with_capacity(32);
         let Some(event_receiver) = &mut self.event_receiver else { return events };
         let mut cx = std::task::Context::from_waker(&Waker::noop());
         while let core::task::Poll::Ready(Some(v)) = event_receiver.poll_recv(&mut cx) {
+            match &v {
+                Event::Connecting => {
+                    self.state = State::Disconnected;
+                },
+                Event::Connected => {
+                    self.state = State::Connected;
+                },
+                Event::Disconnected => {
+                    self.state = State::Disconnected;
+                },
+                Event::Message(_) => {
+                },
+            }
             events.push(v);
         }
 
@@ -152,6 +167,8 @@ impl<T:Message> Client<T> {
     }
 
     /// State of the connection
+    /// 
+    /// Ensure `events()` has been called before obtaining the state of the connection
     pub fn state(&self) -> State {
         self.state
     }
@@ -172,7 +189,10 @@ mod tests {
             assert_eq!(client.send("hello world".to_owned()), false);
             loop {
                 for e in client.events() {
-                    dbg!("he");
+                }
+
+                if client.state == State::Connected {
+                    client.send("hello from client".to_owned());
                 }
 
                 yield_now().await;
