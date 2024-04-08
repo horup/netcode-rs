@@ -5,7 +5,9 @@ use common::Message;
 use tokio::{sync::{mpsc::{Receiver, Sender}, Mutex}};
 use ewebsock::{WsReceiver, WsSender};
 
+#[derive(Debug)]
 pub enum Event<T> {
+    Connecting,
     Connected,
     Disconnected,
     Message(T)
@@ -47,30 +49,29 @@ impl<T:Message> Client<T> {
     /// Connect to the websocket server
     /// 
     /// Will try to connect forever and will re-connect in case of disconnections. 
-    pub async fn connect(&mut self, addr:impl Into<String>) {
-        let addr:String = addr.into();
+    pub async fn connect(&mut self, url:impl Into<String>) {
         self.disconnect().await;
-        {
-            self.url = addr.clone();
-        }
-
+        let url:String = url.into();
+        self.url = url.clone();
         let (sender, outer_receiver) = tokio::sync::mpsc::channel(1024) as (Sender<T>, Receiver<T>);
         self.ws_sender = Some(sender);
         let (event_sender, event_receiver) = tokio::sync::mpsc::channel(1024) as (Sender<Event<T>>, Receiver<Event<T>>);
         self.event_receiver = Some(event_receiver);
         self.join_handle = Some(tokio::spawn(async move {
+            let mut emit_disconnected = false;
             loop {
                 let mut recreate_socket = false;
-                let socket = ewebsock::connect(&addr, ewebsock::Options {
+                let socket = ewebsock::connect(&url, ewebsock::Options {
                     ..Default::default()
                 });
                 if let Ok((ws_sender, ws_receiver)) = socket {
+                    let _ = event_sender.send(Event::Connecting).await;
                     loop {
                         while let Some(msg) = ws_receiver.try_recv() {
-
                             match msg {
                                 ewebsock::WsEvent::Opened => {
                                     let _ = event_sender.send(Event::Connected).await;
+                                    emit_disconnected = true;
                                 },
                                 ewebsock::WsEvent::Message(msg) => match msg {
                                     ewebsock::WsMessage::Binary(msg) => {
@@ -95,8 +96,13 @@ impl<T:Message> Client<T> {
                             }
                         }
                         if recreate_socket {
-                            let _ = event_sender.send(Event::Disconnected).await;
+                            if emit_disconnected {
+                                let _ = event_sender.send(Event::Disconnected).await;
+                                emit_disconnected = false;
+                            }
                             break;
+                        } else {
+                            tokio::task::yield_now().await;
                         }
                     }
                 }

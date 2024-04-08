@@ -6,12 +6,11 @@ use tokio::task::yield_now;
 #[tokio::main]
 pub async fn main() {
     let mut client = Client::default() as Client<String>;
-    client.connect("wss://echo.websocket.org").await;
+    client.connect("wss://echo.websocket.org2").await;
     loop {
         for e in client.events() {
-            dbg!("h");
+            dbg!(e);
         }
         yield_now().await;
-        tokio::time::sleep(Duration::from_millis(100)).await;
     }
 }
