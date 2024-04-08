@@ -1,5 +1,10 @@
 use tokio_util::sync::CancellationToken;
 
+pub enum Event {
+    ClientConnected,
+    ClientDisconnected
+}
+
 /// `Server` part of `netcode`
 pub struct Server {
     /// The address which the server is currently listening to
@@ -51,6 +56,12 @@ impl Server {
                 return false;
             }
         }
+    }
+
+    /// Collect events
+    pub fn events(&mut self) -> Vec<Event>{
+        let events = Vec::default();
+        events
     }
 
     /// Stops the server, aka stops listening for new connections and drops existing connections
