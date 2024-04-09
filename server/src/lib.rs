@@ -2,7 +2,7 @@
 
 use std::{collections::HashMap, task::Waker};
 
-use futures::sink::SinkExt;
+use futures::{select, sink::SinkExt};
 use futures::stream::StreamExt;
 use http_body_util::Full;
 use hyper::{
@@ -57,22 +57,48 @@ impl<T: common::Message> Default for Server<T> {
 type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
 impl<T: common::Message> Server<T> {
     /// Handle a websocket connection.
-    async fn spawn_client(websocket: HyperWebsocket, event_sender:Sender<InternalEvent<T>>, client_id:ClientId) -> Result<(), Error> {
+    async fn spawn_client(websocket: HyperWebsocket, event_sender:Sender<InternalEvent<T>>, client_id:ClientId, cancellation_token: CancellationToken) -> Result<(), Error> {
         let websocket = websocket.await?;
         let (sink, mut stream) = websocket.split();
         event_sender.send(InternalEvent::ClientConnected { client_id: client_id, sink: sink }).await?;
-        while let Some(message) = stream.next().await {
-            match message? {
-                Message::Binary(bincoded) => {
-                    let msg = bincode::deserialize(&bincoded) as Result<T, _>;
-                    if let Ok(msg) = msg {
-                        let _ = event_sender.send(InternalEvent::Message { client_id: client_id, msg: msg }).await;
+        loop {
+            tokio::select! {
+                _ = cancellation_token.cancelled() => {
+                    break;
+                }
+                message = stream.next() => {
+                    match message {
+                        Some(message) => {
+                            match message {
+                                Ok(message) => {
+                                    match message {
+                                        Message::Binary(bincoded) => {
+                                            let msg = bincode::deserialize(&bincoded) as Result<T, _>;
+                                            match msg {
+                                                Ok(msg) => {
+                                                    let _ = event_sender.send(InternalEvent::Message { client_id: client_id, msg: msg }).await;
+                                                }
+                                                Err(_) => {
+                                                    break;
+                                                }
+                                            }
+                                        },
+                                        _=>{}
+                                    }
+                                },
+                                Err(_) => {
+                                    break;
+                                }
+                            }
+                        },
+                        _=> {
+                            break;
+                        }
                     }
-                },
-                _=>{}
+                }
             }
         }
-
+      
         Ok(())
     }
 
@@ -82,12 +108,13 @@ impl<T: common::Message> Server<T> {
     async fn handle_request(
         mut request: Request<Incoming>,
         event_sender:Sender<InternalEvent<T>>,
-        client_id:ClientId
+        client_id:ClientId,
+        cancellation_token: CancellationToken
     ) -> Result<Response<Full<Bytes>>, Error> {
         if hyper_tungstenite::is_upgrade_request(&request) {
             let (response, websocket) = hyper_tungstenite::upgrade(&mut request, None)?;
             tokio::spawn(async move {
-                let _ = Self::spawn_client(websocket, event_sender, client_id).await;
+                let _ = Self::spawn_client(websocket, event_sender, client_id, cancellation_token).await;
             });
             Ok(response) as Result<Response<Full<Bytes>>, _>
         } else {
@@ -102,6 +129,7 @@ impl<T: common::Message> Server<T> {
         tokio::spawn(async move {
             let mut next_client_id = 1;
             loop {
+                let cancellation_token = cancellation_token.clone();
                 tokio::select! {
                     _ = cancellation_token.cancelled() => {
                         break;
@@ -117,8 +145,8 @@ impl<T: common::Message> Server<T> {
                                 http_builder.keep_alive(true);
                                 let connection = http_builder.serve_connection(hyper_util::rt::TokioIo::new(stream), hyper::service::service_fn(|request| {
                                     let event_sender = event_sender.clone();
-
-                                    Self::handle_request(request, event_sender, client_id)
+                                    let cancellation_token = cancellation_token.clone();
+                                    Self::handle_request(request, event_sender, client_id, cancellation_token)
                                 }))
                                 .with_upgrades();
                                 let _ = connection.await;
@@ -208,6 +236,7 @@ impl<T: common::Message> Server<T> {
             self.cancellation_token = None;
             self.listener_addr = None;
             self.event_receiver = None;
+            self.clients.clear();
         }
 
         // yields back to tokio to ensure listener can be shutdown before returning from the function
