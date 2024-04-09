@@ -1,9 +1,8 @@
 #![feature(noop_waker)]
 
-use std::{future::Ready, sync::Arc, task::Waker, time::Duration};
+use std::{task::Waker, time::Duration};
 use common::Message;
-use tokio::{sync::{mpsc::{Receiver, Sender}, Mutex}};
-use ewebsock::{WsReceiver, WsSender};
+use tokio::sync::mpsc::{Receiver, Sender};
 
 #[derive(Debug)]
 pub enum Event<T> {
@@ -95,7 +94,7 @@ impl<T:Message> Client<T> {
                                     },
                                     _ => {}
                                 },
-                                ewebsock::WsEvent::Error(err) => {
+                                ewebsock::WsEvent::Error(_err) => {
                                     recreate_socket = true;
                                 },
                                 ewebsock::WsEvent::Closed => {
