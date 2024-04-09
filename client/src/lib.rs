@@ -142,7 +142,7 @@ impl<T:Message> Client<T> {
     /// Collect and process events
     /// 
     /// Returns the processed events which can be further processed by the calling application 
-    pub fn events(&mut self) -> Vec<Event<T>> {
+    pub fn poll(&mut self) -> Vec<Event<T>> {
         let mut events = Vec::with_capacity(32);
         let Some(event_receiver) = &mut self.event_receiver else { return events };
         let mut cx = std::task::Context::from_waker(&Waker::noop());
@@ -188,7 +188,7 @@ mod tests {
             client.connect("wss://echo.websocket.org/").await;
             assert_eq!(client.send("hello world".to_owned()), false);
             loop {
-                for e in client.events() {
+                for e in client.poll() {
                 }
 
                 if client.state == State::Connected {

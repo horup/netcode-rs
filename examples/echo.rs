@@ -8,7 +8,7 @@ pub async fn main() {
         let mut server = Server::default() as Server<String>;
         server.start(8080).await;
         loop {
-            for e in server.events() {
+            for e in server.poll() {
                 if let Event::Message { client_id, msg } = e {
                     todo!();
                 }
@@ -23,7 +23,7 @@ pub async fn main() {
         let mut client = Client::default() as Client<String>;
         client.connect("ws://localhost:8080").await;
         loop {
-            for e in client.events() {
+            for e in client.poll() {
                 if let Event::Message(msg) = &e {
                     println!("{}", msg);
                 }

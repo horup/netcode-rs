@@ -145,7 +145,7 @@ impl<T: common::Message> Server<T> {
     /// Collect and process events
     /// 
     /// Returns the processed events which can be further processed by the calling application 
-    pub fn events(&mut self) -> Vec<Event<T>> {
+    pub fn poll(&mut self) -> Vec<Event<T>> {
         let events = Vec::default();
         events
     }
