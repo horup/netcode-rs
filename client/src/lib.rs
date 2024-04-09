@@ -53,7 +53,7 @@ impl<T:Message> Client<T> {
         self.disconnect().await;
         let url:String = url.into();
         self.url = url.clone();
-        let (sender, outer_receiver) = tokio::sync::mpsc::channel(1024) as (Sender<T>, Receiver<T>);
+        let (sender, mut outer_receiver) = tokio::sync::mpsc::channel(1024) as (Sender<T>, Receiver<T>);
         self.ws_sender = Some(sender);
         let (event_sender, event_receiver) = tokio::sync::mpsc::channel(1024) as (Sender<Event<T>>, Receiver<Event<T>>);
         self.event_receiver = Some(event_receiver);
@@ -64,9 +64,17 @@ impl<T:Message> Client<T> {
                 let socket = ewebsock::connect(&url, ewebsock::Options {
                     ..Default::default()
                 });
-                if let Ok((ws_sender, ws_receiver)) = socket {
+                if let Ok((mut ws_sender, ws_receiver)) = socket {
                     let _ = event_sender.send(Event::Connecting).await;
                     loop {
+                        // send messages
+                        while let Ok(msg) = outer_receiver.try_recv() {
+                            if let Ok(bincoded) = bincode::serialize(&msg) {
+                                ws_sender.send(ewebsock::WsMessage::Binary(bincoded));
+                            }
+                        }
+                        
+                        // recv messages
                         while let Some(msg) = ws_receiver.try_recv() {
                             match msg {
                                 ewebsock::WsEvent::Opened => {
@@ -102,7 +110,7 @@ impl<T:Message> Client<T> {
                             }
                             break;
                         } else {
-                            tokio::task::yield_now().await;
+                            tokio::time::sleep(Duration::from_millis(1)).await;
                         }
                     }
                 }
@@ -131,6 +139,7 @@ impl<T:Message> Client<T> {
 
         match &mut self.ws_sender {
             Some(sender) => {
+
                 sender.try_send(msg).is_ok()
             },
             None => {

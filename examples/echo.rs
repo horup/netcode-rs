@@ -1,4 +1,4 @@
-use tokio::task::yield_now;
+use std::time::Duration;
 
 #[tokio::main]
 pub async fn main() {
@@ -10,10 +10,10 @@ pub async fn main() {
         loop {
             for e in server.poll() {
                 if let Event::Message { client_id, msg } = e {
-                    todo!();
+                    server.send(client_id, format!("echo from server: {}", msg));
                 }
             }
-            yield_now().await;
+            tokio::time::sleep(Duration::from_millis(100)).await;
         }
     });
 
@@ -32,7 +32,8 @@ pub async fn main() {
             if client.state() == State::Connected {
                 client.send("hello world".to_owned());
             }
-            yield_now().await;
+
+            tokio::time::sleep(Duration::from_millis(1000)).await;
         }
     })
     .await;
