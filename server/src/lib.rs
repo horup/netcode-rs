@@ -98,6 +98,8 @@ impl<T: common::Message> Server<T> {
                 }
             }
         }
+
+        event_sender.send(InternalEvent::ClientDisconnected { client_id }).await?;
       
         Ok(())
     }
