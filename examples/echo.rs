@@ -1,5 +1,9 @@
 use std::time::Duration;
-
+/// echo server and client example
+/// 
+/// client connects to the server, sends a message every second
+/// 
+/// server replys with a copy of the message.
 #[tokio::main]
 pub async fn main() {
     // spawn a server
