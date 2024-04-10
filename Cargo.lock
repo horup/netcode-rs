@@ -510,6 +510,8 @@ name = "netcode"
 version = "0.1.0"
 dependencies = [
  "client",
+ "rand",
+ "serde",
  "server",
  "tokio",
 ]

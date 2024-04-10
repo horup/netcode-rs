@@ -18,6 +18,17 @@ use tokio_util::sync::CancellationToken;
 #[derive(Hash, PartialEq, Eq, Clone, Copy)]
 pub struct ClientId(u64);
 
+impl From<ClientId> for u64 {
+    fn from(value: ClientId) -> Self {
+        value.0
+    }
+}
+impl From<u64> for ClientId {
+    fn from(value: u64) -> Self {
+        Self(value)
+    }
+}
+
 pub struct Client {
     pub sink:futures::prelude::stream::SplitSink<hyper_tungstenite::WebSocketStream<hyper_util::rt::TokioIo<hyper::upgrade::Upgraded>>, Message>
 }

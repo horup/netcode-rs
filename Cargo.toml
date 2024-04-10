@@ -13,6 +13,8 @@ server = {path = "server"}
 
 [dev-dependencies]
 tokio = {workspace = true}
+serde = {workspace = true}
+rand = "0.8.5"
 
 [workspace.dependencies]
 hyper = {version = "1.1", features = ["server", "http1"]}
