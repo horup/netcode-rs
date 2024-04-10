@@ -11,6 +11,7 @@ use hyper::{
 };
 use hyper_tungstenite::tungstenite::Message;
 use hyper_tungstenite::HyperWebsocket;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::{net::TcpListener, sync::mpsc::Sender};
 use tokio_util::sync::CancellationToken;
 
@@ -52,7 +53,7 @@ pub struct Server<T: common::Message> {
     /// Token to cancel listening
     cancellation_token: Option<tokio_util::sync::CancellationToken>,
     /// receiver of events from connected clients
-    event_receiver: Option<tokio::sync::mpsc::Receiver<InternalEvent<T>>>,
+    event_receiver: Option<tokio::sync::mpsc::UnboundedReceiver<InternalEvent<T>>>,
     clients:HashMap<ClientId, Client>
 }
 impl<T: common::Message> Default for Server<T> {
@@ -68,10 +69,10 @@ impl<T: common::Message> Default for Server<T> {
 type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
 impl<T: common::Message> Server<T> {
     /// Handle a websocket connection.
-    async fn spawn_client(websocket: HyperWebsocket, event_sender:Sender<InternalEvent<T>>, client_id:ClientId, cancellation_token: CancellationToken) -> Result<(), Error> {
+    async fn spawn_client(websocket: HyperWebsocket, event_sender:UnboundedSender<InternalEvent<T>>, client_id:ClientId, cancellation_token: CancellationToken) -> Result<(), Error> {
         let websocket = websocket.await?;
         let (sink, mut stream) = websocket.split();
-        event_sender.send(InternalEvent::ClientConnected { client_id: client_id, sink: sink }).await?;
+        event_sender.send(InternalEvent::ClientConnected { client_id: client_id, sink: sink });
         loop {
             tokio::select! {
                 _ = cancellation_token.cancelled() => {
@@ -87,7 +88,7 @@ impl<T: common::Message> Server<T> {
                                             let msg = bincode::deserialize(&bincoded) as Result<T, _>;
                                             match msg {
                                                 Ok(msg) => {
-                                                    let _ = event_sender.send(InternalEvent::Message { client_id: client_id, msg: msg }).await;
+                                                    let _ = event_sender.send(InternalEvent::Message { client_id: client_id, msg: msg });
                                                 }
                                                 Err(_) => {
                                                     break;
@@ -110,7 +111,7 @@ impl<T: common::Message> Server<T> {
             }
         }
 
-        event_sender.send(InternalEvent::ClientDisconnected { client_id }).await?;
+        event_sender.send(InternalEvent::ClientDisconnected { client_id });
       
         Ok(())
     }
@@ -120,7 +121,7 @@ impl<T: common::Message> Server<T> {
     /// requests that are upgraded to websocket connections, are passed to a new task that takes care of polling the connection
     async fn handle_request(
         mut request: Request<Incoming>,
-        event_sender:Sender<InternalEvent<T>>,
+        event_sender:UnboundedSender<InternalEvent<T>>,
         client_id:ClientId,
         cancellation_token: CancellationToken
     ) -> Result<Response<Full<Bytes>>, Error> {
@@ -138,7 +139,7 @@ impl<T: common::Message> Server<T> {
     /// spawns tcp listener which accepts tcp connects
     /// 
     /// accepted connections are passed to a task where they are upgraded into http requests
-    fn spawn_listener(cancellation_token: CancellationToken, listener: TcpListener, event_sender:Sender<InternalEvent<T>>) {
+    fn spawn_listener(cancellation_token: CancellationToken, listener: TcpListener, event_sender:UnboundedSender<InternalEvent<T>>) {
         tokio::spawn(async move {
             let mut next_client_id = 1;
             loop {
@@ -179,7 +180,7 @@ impl<T: common::Message> Server<T> {
         let addr: std::net::SocketAddr = format!("0.0.0.0:{}", port)
             .parse()
             .expect("could not parse address");
-        let (event_sender, event_receiver) = tokio::sync::mpsc::channel(1024);
+        let (event_sender, event_receiver) = tokio::sync::mpsc::unbounded_channel();
         self.event_receiver = Some(event_receiver);
         match tokio::net::TcpListener::bind(&addr).await {
             Ok(listener) => {
