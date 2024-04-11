@@ -1,7 +1,7 @@
 #![feature(noop_waker)]
 
 use std::{task::Waker, time::Duration};
-use common::Message;
+use common::Msg;
 use tokio::sync::mpsc::{Receiver, Sender};
 
 #[derive(Debug)]
@@ -38,13 +38,13 @@ pub struct Client<T> {
     state:State
 }
 
-impl<T:Message> Default for Client<T> {
+impl<T:Msg> Default for Client<T> {
     fn default() -> Self {
         Self { url:Default::default(), join_handle:None, ws_sender:None, event_receiver:None, state:State::Disconnected }
     }
 }
 
-impl<T:Message> Client<T> {
+impl<T:Msg> Client<T> {
     /// Connect to the websocket server
     /// 
     /// Will try to connect forever and will re-connect in case of disconnections. 
@@ -179,32 +179,5 @@ impl<T:Message> Client<T> {
     /// Ensure `events()` has been called before obtaining the state of the connection
     pub fn state(&self) -> State {
         self.state
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use tokio::task::yield_now;
-
-    use super::*;
-
-    #[test]
-    fn test() {
-        tokio_test::block_on(async {
-            let mut client = Client::default() as Client<String>;
-            client.connect("wss://echo.websocket.org/").await;
-            client.connect("wss://echo.websocket.org/").await;
-            assert!(!client.send("hello world".to_owned()));
-            loop {
-                for _e in client.poll() {
-                }
-
-                if client.state == State::Connected {
-                    client.send("hello from client".to_owned());
-                }
-
-                yield_now().await;
-            }
-        });
     }
 }

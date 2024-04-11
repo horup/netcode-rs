@@ -48,7 +48,7 @@ pub enum Event<T> {
 }
 
 /// `Server` part of `netcode`
-pub struct Server<T: common::Message> {
+pub struct Server<T: common::Msg> {
     /// The address which the server is currently listening to
     listener_addr: Option<std::net::SocketAddr>,
     /// Token to cancel listening
@@ -57,7 +57,7 @@ pub struct Server<T: common::Message> {
     event_receiver: Option<tokio::sync::mpsc::UnboundedReceiver<InternalEvent<T>>>,
     clients:HashMap<ClientId, Client>
 }
-impl<T: common::Message> Default for Server<T> {
+impl<T: common::Msg> Default for Server<T> {
     fn default() -> Self {
         Self {
             listener_addr: None,
@@ -68,7 +68,7 @@ impl<T: common::Message> Default for Server<T> {
     }
 }
 type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
-impl<T: common::Message> Server<T> {
+impl<T: common::Msg> Server<T> {
     /// Handle a websocket connection.
     async fn spawn_client(websocket: HyperWebsocket, event_sender:UnboundedSender<InternalEvent<T>>, client_id:ClientId, cancellation_token: CancellationToken) -> Result<(), Error> {
         let websocket = websocket.await?;

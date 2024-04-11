@@ -10,6 +10,7 @@ edition = "2021"
 [dependencies]
 client = {path = "client"}
 server = {path = "server"}
+common = {path = "common"}
 
 [dev-dependencies]
 tokio = {workspace = true}
