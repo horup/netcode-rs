@@ -1,4 +1,4 @@
-use std::{collections::HashMap, task::Waker};
+use std::collections::HashMap;
 
 use common::Metrics;
 use futures::sink::SinkExt;
