@@ -59,16 +59,17 @@ pub fn spawn_client(i:i32) {
 }
 
 pub fn spawn_server() -> tokio::task::JoinHandle<()> {
-    let server_handle = tokio::spawn(async {
+    
+    tokio::spawn(async {
         use netcode::server::*;
         let mut server = Server::default() as Server<Msg>;
         server.start(8080).await;
         loop {
             for e in server.poll() {
                 match e {
-                    Event::ClientConnected { client_id } => {
+                    Event::ClientConnected { client_id: _ } => {
                     }
-                    Event::ClientDisconnected { client_id } => {
+                    Event::ClientDisconnected { client_id: _ } => {
                     }
                     Event::Message { client_id, msg } => {
                         match msg {
@@ -83,6 +84,5 @@ pub fn spawn_server() -> tokio::task::JoinHandle<()> {
 
             yield_now().await;
         }
-    });
-    return server_handle;
+    })
 }

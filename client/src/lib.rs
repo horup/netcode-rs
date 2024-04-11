@@ -51,7 +51,7 @@ impl<T:Message> Client<T> {
     pub async fn connect(&mut self, url:impl Into<String>) {
         self.disconnect().await;
         let url:String = url.into();
-        self.url = url.clone();
+        self.url.clone_from(&url);
         let (sender, mut outer_receiver) = tokio::sync::mpsc::channel(1024) as (Sender<T>, Receiver<T>);
         self.ws_sender = Some(sender);
         let (event_sender, event_receiver) = tokio::sync::mpsc::channel(1024) as (Sender<Event<T>>, Receiver<Event<T>>);
@@ -153,7 +153,7 @@ impl<T:Message> Client<T> {
     pub fn poll(&mut self) -> Vec<Event<T>> {
         let mut events = Vec::with_capacity(32);
         let Some(event_receiver) = &mut self.event_receiver else { return events };
-        let mut cx = std::task::Context::from_waker(&Waker::noop());
+        let mut cx = std::task::Context::from_waker(Waker::noop());
         while let core::task::Poll::Ready(Some(v)) = event_receiver.poll_recv(&mut cx) {
             match &v {
                 Event::Connecting => {
@@ -194,9 +194,9 @@ mod tests {
             let mut client = Client::default() as Client<String>;
             client.connect("wss://echo.websocket.org/").await;
             client.connect("wss://echo.websocket.org/").await;
-            assert_eq!(client.send("hello world".to_owned()), false);
+            assert!(!client.send("hello world".to_owned()));
             loop {
-                for e in client.poll() {
+                for _e in client.poll() {
                 }
 
                 if client.state == State::Connected {

@@ -2,7 +2,7 @@
 
 use std::{collections::HashMap, task::Waker};
 
-use futures::{select, sink::SinkExt};
+use futures::sink::SinkExt;
 use futures::stream::StreamExt;
 use http_body_util::Full;
 use hyper::{
@@ -11,8 +11,8 @@ use hyper::{
 };
 use hyper_tungstenite::tungstenite::Message;
 use hyper_tungstenite::HyperWebsocket;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
-use tokio::{net::TcpListener, sync::mpsc::Sender};
+use tokio::sync::mpsc::UnboundedSender;
+use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
 /// Unique id of a client
@@ -81,7 +81,7 @@ impl<T: common::Message> Server<T> {
             }
         });
 
-        let _ = event_sender.send(InternalEvent::ClientConnected { client_id: client_id, sink: msg_sender });
+        let _ = event_sender.send(InternalEvent::ClientConnected { client_id, sink: msg_sender });
         // use current task to read messages from the socket
 
         loop {
@@ -99,7 +99,7 @@ impl<T: common::Message> Server<T> {
                                             let msg = bincode::deserialize(&bincoded) as Result<T, _>;
                                             match msg {
                                                 Ok(msg) => {
-                                                    let _ = event_sender.send(InternalEvent::Message { client_id: client_id, msg: msg });
+                                                    let _ = event_sender.send(InternalEvent::Message { client_id, msg });
                                                 }
                                                 Err(_) => {
                                                     break;
@@ -122,7 +122,7 @@ impl<T: common::Message> Server<T> {
             }
         }
 
-        event_sender.send(InternalEvent::ClientDisconnected { client_id });
+        let _ = event_sender.send(InternalEvent::ClientDisconnected { client_id });
       
         Ok(())
     }
@@ -201,10 +201,10 @@ impl<T: common::Message> Server<T> {
                 let cancellation_token = CancellationToken::new();
                 self.cancellation_token = Some(cancellation_token.clone());
                 Self::spawn_listener(cancellation_token, listener, event_sender);
-                return true;
+                true
             }
             Err(_) => {
-                return false;
+                false
             }
         }
     }
@@ -227,7 +227,7 @@ impl<T: common::Message> Server<T> {
     /// Returns the processed events which can be further processed by the calling application 
     pub fn poll(&mut self) -> Vec<Event<T>> {
         let mut events = Vec::default();
-        let mut cx = std::task::Context::from_waker(&Waker::noop());
+        let mut cx = std::task::Context::from_waker(Waker::noop());
         if let Some(event_receiver) = &mut self.event_receiver {
             while let core::task::Poll::Ready(Some(e)) = event_receiver.poll_recv(&mut cx) {
                 match e {
@@ -272,10 +272,10 @@ mod tests {
     fn it_works() {
         tokio_test::block_on(async {
             let mut server = Server::default() as Server<String>;
-            assert_eq!(server.start(8080).await, true);
-            assert_eq!(server.start(8080).await, false);
+            assert!(server.start(8080).await);
+            assert!(!(server.start(8080).await));
             server.stop().await;
-            assert_eq!(server.start(8080).await, true);
+            assert!(server.start(8080).await);
         });
     }
 }

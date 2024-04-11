@@ -112,7 +112,7 @@ pub fn spawn_server() -> tokio::task::JoinHandle<()> {
             }
             for client_id in connected_clients {
                 let res = server.send(client_id, Msg::StateUpdate(dummy_hashmap.clone()));
-                if res == false {
+                if !res {
                     panic!();
                 }
             }
@@ -128,5 +128,5 @@ pub fn spawn_server() -> tokio::task::JoinHandle<()> {
             }
         }
     });
-    return server_handle;
+    server_handle
 }
