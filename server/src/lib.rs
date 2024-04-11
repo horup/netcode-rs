@@ -1,5 +1,3 @@
-#![feature(noop_waker)]
-
 use std::{collections::HashMap, task::Waker};
 
 use common::Metrics;
@@ -233,7 +231,8 @@ impl<T: common::Msg> Server<T> {
     /// Returns the processed events which can be further processed by the calling application 
     pub fn poll(&mut self) -> Vec<Event<T>> {
         let mut events = Vec::default();
-        let mut cx = std::task::Context::from_waker(Waker::noop());
+        let waker = noop_waker::noop_waker();
+        let mut cx = std::task::Context::from_waker(&waker);
         if let Some(event_receiver) = &mut self.event_receiver {
             while let core::task::Poll::Ready(Some(e)) = event_receiver.poll_recv(&mut cx) {
                 match e {

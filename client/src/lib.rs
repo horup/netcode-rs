@@ -1,5 +1,3 @@
-#![feature(noop_waker)]
-
 use std::{task::Waker, time::Duration};
 use common::Msg;
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -153,7 +151,8 @@ impl<T:Msg> Client<T> {
     pub fn poll(&mut self) -> Vec<Event<T>> {
         let mut events = Vec::with_capacity(32);
         let Some(event_receiver) = &mut self.event_receiver else { return events };
-        let mut cx = std::task::Context::from_waker(Waker::noop());
+        let waker = noop_waker::noop_waker();
+        let mut cx = std::task::Context::from_waker(&waker);
         while let core::task::Poll::Ready(Some(v)) = event_receiver.poll_recv(&mut cx) {
             match &v {
                 Event::Connecting => {

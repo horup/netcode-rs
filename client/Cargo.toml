@@ -10,5 +10,6 @@ common = {path = "../common"}
 tokio-util = {workspace = true}
 bincode = { workspace = true }
 serde = { workspace = true }
+noop-waker = { workspace = true }
 [dev-dependencies]
 tokio-test = {workspace = true}

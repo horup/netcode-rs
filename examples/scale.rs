@@ -32,6 +32,7 @@ pub async fn main() {
 
 
 pub fn spawn_client() {
+
     tokio::spawn(async {
         use netcode::client::*;
         let mut client = Client::default() as Client<Msg>;
