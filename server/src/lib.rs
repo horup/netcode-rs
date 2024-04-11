@@ -31,11 +31,12 @@ impl From<u64> for ClientId {
 }
 
 pub struct Client {
-    pub sink:futures::prelude::stream::SplitSink<hyper_tungstenite::WebSocketStream<hyper_util::rt::TokioIo<hyper::upgrade::Upgraded>>, Message>
+    pub sink:tokio::sync::mpsc::UnboundedSender<Message>
+    //pub sink:futures::prelude::stream::SplitSink<hyper_tungstenite::WebSocketStream<hyper_util::rt::TokioIo<hyper::upgrade::Upgraded>>, Message>
 }
 
 pub enum InternalEvent<T> {
-    ClientConnected { client_id: ClientId, sink:futures::prelude::stream::SplitSink<hyper_tungstenite::WebSocketStream<hyper_util::rt::TokioIo<hyper::upgrade::Upgraded>>, Message> },
+    ClientConnected { client_id: ClientId, sink:tokio::sync::mpsc::UnboundedSender<Message> },
     ClientDisconnected { client_id: ClientId },
     Message { client_id: ClientId, msg: T },
 }
@@ -71,8 +72,18 @@ impl<T: common::Message> Server<T> {
     /// Handle a websocket connection.
     async fn spawn_client(websocket: HyperWebsocket, event_sender:UnboundedSender<InternalEvent<T>>, client_id:ClientId, cancellation_token: CancellationToken) -> Result<(), Error> {
         let websocket = websocket.await?;
-        let (sink, mut stream) = websocket.split();
-        event_sender.send(InternalEvent::ClientConnected { client_id: client_id, sink: sink });
+        let (mut sink, mut stream) = websocket.split();
+        // spawn a sender task
+        let (msg_sender, mut msg_receiver) = tokio::sync::mpsc::unbounded_channel();
+        tokio::spawn(async move {
+            while let Some(msg) = msg_receiver.recv().await {
+                let _ = sink.send(msg).await;
+            }
+        });
+
+        let _ = event_sender.send(InternalEvent::ClientConnected { client_id: client_id, sink: msg_sender });
+        // use current task to read messages from the socket
+
         loop {
             tokio::select! {
                 _ = cancellation_token.cancelled() => {
@@ -204,10 +215,8 @@ impl<T: common::Message> Server<T> {
     pub fn send(&mut self, client_id:impl Into<ClientId>, msg:T) -> bool {
         if let Some(client) = self.clients.get_mut(&client_id.into()) {
             let Ok(bincoded) = bincode::serialize(&msg) else { return false };
-            match client.sink.start_send_unpin(Message::Binary(bincoded)) {
-                Ok(_) => return true,
-                Err(_) => return false,
-            }
+            let r = client.sink.send(Message::Binary(bincoded));
+            return r.is_ok();
         }
 
         false
@@ -219,9 +228,6 @@ impl<T: common::Message> Server<T> {
     pub fn poll(&mut self) -> Vec<Event<T>> {
         let mut events = Vec::default();
         let mut cx = std::task::Context::from_waker(&Waker::noop());
-        for (_, client) in self.clients.iter_mut() {
-            let _ = client.sink.poll_flush_unpin(&mut cx);
-        }
         if let Some(event_receiver) = &mut self.event_receiver {
             while let core::task::Poll::Ready(Some(e)) = event_receiver.poll_recv(&mut cx) {
                 match e {
