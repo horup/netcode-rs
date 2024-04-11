@@ -75,8 +75,12 @@ pub fn spawn_server() -> tokio::task::JoinHandle<()> {
             }
 
             let connected_clients:Vec<ClientId> = players.keys().map(|x|ClientId::from(*x)).collect();
+            let mut dummy_hashmap = HashMap::default();
+            for i in 0..10 {
+                dummy_hashmap.insert(i, Player { id: i, x: i as f32, y: i as f32 });
+            }
             for client_id in connected_clients {
-                let res = server.send(client_id, Msg::StateUpdate(players.clone()));
+                let res = server.send(client_id, Msg::StateUpdate(dummy_hashmap.clone()));
                 if res == false {
                     panic!();
                 }
@@ -102,7 +106,7 @@ pub async fn main() {
     // spawn a server
     let server_handle = spawn_server();
 
-    let num_clients = 512;
+    let num_clients = 100;
     for _ in 0..num_clients {
         spawn_client();
     }
