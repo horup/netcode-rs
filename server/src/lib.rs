@@ -2,6 +2,7 @@
 
 use std::{collections::HashMap, task::Waker};
 
+use common::Metrics;
 use futures::sink::SinkExt;
 use futures::stream::StreamExt;
 use http_body_util::Full;
@@ -38,7 +39,7 @@ pub struct Client {
 pub enum InternalEvent<T> {
     ClientConnected { client_id: ClientId, sink:tokio::sync::mpsc::UnboundedSender<Message> },
     ClientDisconnected { client_id: ClientId },
-    Message { client_id: ClientId, msg: T },
+    Message { client_id: ClientId, msg: T, len:usize },
 }
 
 pub enum Event<T> {
@@ -55,7 +56,9 @@ pub struct Server<T: common::Msg> {
     cancellation_token: Option<tokio_util::sync::CancellationToken>,
     /// receiver of events from connected clients
     event_receiver: Option<tokio::sync::mpsc::UnboundedReceiver<InternalEvent<T>>>,
-    clients:HashMap<ClientId, Client>
+    clients:HashMap<ClientId, Client>,
+    /// holds the metrics of the server
+    pub metrics:Metrics
 }
 impl<T: common::Msg> Default for Server<T> {
     fn default() -> Self {
@@ -63,7 +66,8 @@ impl<T: common::Msg> Default for Server<T> {
             listener_addr: None,
             cancellation_token: None,
             event_receiver: None,
-            clients:HashMap::default()
+            clients:HashMap::default(),
+            metrics: Default::default()
         }
     }
 }
@@ -96,10 +100,11 @@ impl<T: common::Msg> Server<T> {
                                 Ok(message) => {
                                     match message {
                                         Message::Binary(bincoded) => {
+                                            let len = bincoded.len();
                                             let msg = bincode::deserialize(&bincoded) as Result<T, _>;
                                             match msg {
                                                 Ok(msg) => {
-                                                    let _ = event_sender.send(InternalEvent::Message { client_id, msg });
+                                                    let _ = event_sender.send(InternalEvent::Message { client_id, msg, len });
                                                 }
                                                 Err(_) => {
                                                     break;
@@ -215,6 +220,7 @@ impl<T: common::Msg> Server<T> {
     pub fn send(&mut self, client_id:impl Into<ClientId>, msg:T) -> bool {
         if let Some(client) = self.clients.get_mut(&client_id.into()) {
             let Ok(bincoded) = bincode::serialize(&msg) else { return false };
+            self.metrics.add_send(bincoded.len());
             let r = client.sink.send(Message::Binary(bincoded));
             return r.is_ok();
         }
@@ -239,7 +245,8 @@ impl<T: common::Msg> Server<T> {
                         self.clients.remove(&client_id);
                         events.push(Event::ClientDisconnected { client_id });
                     },
-                    InternalEvent::Message { client_id, msg } => {
+                    InternalEvent::Message { client_id, msg, len } => {
+                        self.metrics.add_recv(len);
                         events.push(Event::Message { client_id, msg })
                     },
                 }
@@ -253,11 +260,13 @@ impl<T: common::Msg> Server<T> {
         let token = self.cancellation_token.take();
         if let Some(token) = token {
             token.cancel();
-            self.cancellation_token = None;
-            self.listener_addr = None;
-            self.event_receiver = None;
-            self.clients.clear();
         }
+
+        self.cancellation_token = None;
+        self.listener_addr = None;
+        self.event_receiver = None;
+        self.clients.clear();
+        self.metrics = Default::default();
 
         // yields back to tokio to ensure listener can be shutdown before returning from the function
         tokio::task::yield_now().await;

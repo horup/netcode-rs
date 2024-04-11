@@ -9,10 +9,12 @@ impl<T> Msg for T where T: Send + Sync + Clone + Serialize + DeserializeOwned + 
 /// Struct holdning common network metric information
 pub struct Metrics {
     instant: Instant,
-    recv_total: u64,
-    recv_sec: u64,
-    send_total: u64,
-    send_sec: u64,
+    recv_total: usize,
+    recv_sec: usize,
+    recv_sec_buffer: usize,
+    send_total: usize,
+    send_sec: usize,
+    send_sec_buffer: usize,
 }
 
 impl Default for Metrics {
@@ -23,6 +25,8 @@ impl Default for Metrics {
             recv_sec: 0,
             send_total: 0,
             send_sec: 0,
+            recv_sec_buffer:0,
+            send_sec_buffer:0
         }
     }
 }
@@ -30,32 +34,36 @@ impl Default for Metrics {
 impl Metrics {
     fn update(&mut self) {
         if self.instant.elapsed().as_secs() >= 1 {
-            self.send_sec = self.send_total;
-            self.recv_sec = self.recv_total;
+            self.send_sec = self.send_sec_buffer;
+            self.recv_sec = self.recv_sec_buffer;
+            self.send_sec_buffer = 0;
+            self.recv_sec_buffer = 0;
             self.instant = Instant::now();
         }
     }
-    pub fn add_send(&mut self, value:u64) {
+    pub fn add_send(&mut self, value:usize) {
         self.send_total += value;
+        self.send_sec_buffer += value;
         self.update();
     }
-    pub fn add_recv(&mut self, value:u64) {
+    pub fn add_recv(&mut self, value:usize) {
         self.recv_total += value;
+        self.recv_sec_buffer += value;
         self.update();
     }
-    pub fn recv_total(&mut self) -> u64 {
+    pub fn recv_total(&mut self) -> usize {
         self.update();
         self.recv_total
     }
-    pub fn recv_per_sec(&mut self) -> u64 {
+    pub fn recv_per_sec(&mut self) -> usize {
         self.update();
         self.recv_sec
     }
-    pub fn send_total(&mut self) -> u64 {
+    pub fn send_total(&mut self) -> usize {
         self.update();
         self.send_total
     }
-    pub fn send_per_sec(&mut self) -> u64 {
+    pub fn send_per_sec(&mut self) -> usize {
         self.update();
         self.send_sec
     }

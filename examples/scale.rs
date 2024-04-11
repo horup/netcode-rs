@@ -120,7 +120,7 @@ pub fn spawn_server() -> tokio::task::JoinHandle<()> {
 
             let took = Instant::now() - now;
 
-            println!("Connected: {}, Took: {}ms", connected, took.as_millis());
+            println!("Connected: {}, Took: {}ms, Send/sec:{}KB/s, Recv/sec:{}KB/s", connected, took.as_millis(), server.metrics.send_per_sec() / 1000, server.metrics.recv_per_sec() / 1000);
 
             if target > took {
                 let sleep = target - took;
