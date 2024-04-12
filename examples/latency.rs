@@ -14,7 +14,7 @@ enum Msg {
 #[tokio::main(flavor = "multi_thread", worker_threads = 10)]
 pub async fn main() {
     let server_handle = spawn_server();
-    let num_clients = 10;
+    let num_clients = 1;
     for i in 0..num_clients {
         spawn_client(i);
     }
@@ -36,10 +36,10 @@ pub fn spawn_client(i:i32) {
                     Event::Message(msg) => {
                         match msg {
                             Msg::Pong(v) => {
-                                let now = clock.elapsed().as_millis();
+                                let now = clock.elapsed().as_micros();
                                 let took = now - v;
                                 if i == 0 {
-                                    println!("{}:latency:{}ms", i, took);
+                                    println!("{}:latency:{}us", i, took);
                                 }
                             }
                             _ => {}
@@ -50,7 +50,7 @@ pub fn spawn_client(i:i32) {
             }
             
             if next.elapsed().as_millis() >= 50 {
-                client.send(Msg::Ping(clock.elapsed().as_millis()));
+                client.send(Msg::Ping(clock.elapsed().as_micros()));
                 next = Instant::now();
             }
             yield_now().await;
