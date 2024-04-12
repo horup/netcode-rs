@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Debug};
 
 use common::Metrics;
 use futures::sink::SinkExt;
@@ -17,6 +17,12 @@ use tokio_util::sync::CancellationToken;
 /// Unique id of a client
 #[derive(Hash, PartialEq, Eq, Clone, Copy)]
 pub struct ClientId(u64);
+
+impl Debug for ClientId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("ClientId").field(&self.0).finish()
+    }
+}
 
 impl From<ClientId> for u64 {
     fn from(value: ClientId) -> Self {
@@ -57,6 +63,14 @@ pub struct Server<T: common::Msg> {
     clients:HashMap<ClientId, Client>,
     /// holds the metrics of the server
     pub metrics:Metrics
+}
+
+impl<T: common::Msg> Drop for Server<T> {
+    fn drop(&mut self) {
+        if let Some(cancellation_token) = &mut self.cancellation_token {
+            cancellation_token.cancel();
+        }
+    }
 }
 impl<T: common::Msg> Default for Server<T> {
     fn default() -> Self {

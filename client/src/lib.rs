@@ -131,7 +131,7 @@ impl<T:Msg> Client<T> {
         self.ws_receiver = None;
         self.ws_sender = None;
         self.url = String::default();
-        self.state = State::Disconnected;
+        //self.state = State::Disconnected;
     }
 
    /* pub async fn disconnect(&mut self) {
@@ -171,11 +171,16 @@ impl<T:Msg> Client<T> {
     /// 
     /// Returns the processed events which can be further processed by the calling application 
     pub fn poll(&mut self) -> Vec<Event<T>> {
+        let mut events = Vec::with_capacity(32);
+
         if self.url.is_empty() {
-            return Default::default();
+            if self.state == State::Connected {
+                self.state = State::Disconnected;
+                events.push(Event::Disconnected);
+            }
+            return events;
         }
 
-        let mut events = Vec::with_capacity(32);
         if self.ws_sender.is_none() {
             let socket = ewebsock::connect(&self.url, ewebsock::Options {
                 ..Default::default()
