@@ -27,7 +27,7 @@ pub fn spawn_client(i:i32) {
     tokio::spawn(async move {
         use netcode::client::*;
         let mut client = Client::default() as Client<Msg>;
-        client.connect("ws://localhost:8080").await;
+        client.connect("ws://localhost:8080");
         let clock = Instant::now();
         let mut next = Instant::now();
         loop {

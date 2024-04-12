@@ -27,12 +27,12 @@ pub async fn main() {
         let j = tokio::spawn(async move {
             use netcode::client::*;
             let mut client = Client::default() as Client<String>;
-            client.connect("ws://localhost:8080").await;
+            client.connect("ws://localhost:8080");
             loop {
                 for e in client.poll() {
                     if let Event::Message(msg) = &e {
                         println!("{}", msg);
-                        client.disconnect().await;
+                        client.disconnect();
                     }
                 }
 

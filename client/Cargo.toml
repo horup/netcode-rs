@@ -6,17 +6,5 @@ edition = "2021"
 [dependencies]
 ewebsock = {workspace = true}
 common = {path = "../common"}
-tokio-util = {workspace = true}
 bincode = { workspace = true }
 serde = { workspace = true }
-#noop-waker = { workspace = true }
-
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-#tokio = {workspace = true}
-
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-#tokio = {version = "1.36", features = ["rt", "time", "sync", "macros"]}
-
-
-[dev-dependencies]
-tokio-test = {workspace = true}
