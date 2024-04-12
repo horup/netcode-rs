@@ -1,6 +1,6 @@
-use std::time::Duration;
+use std::marker::PhantomData;
 use common::Msg;
-use tokio::sync::mpsc::{Receiver, Sender};
+use ewebsock::{WsReceiver, WsSender};
 
 #[derive(Debug)]
 pub enum Event<T> {
@@ -23,22 +23,21 @@ pub struct Client<T> {
     /// Address to connect to
     url:String,
 
-    /// Background task polling the socket
-    join_handle:Option<tokio::task::JoinHandle<()>>,
-
     /// Sender used to send messages to the server
-    ws_sender:Option<tokio::sync::mpsc::Sender<T>>,
+    ws_sender:Option<WsSender>,
 
     /// Receiver used to receive events from the background task
-    event_receiver:Option<tokio::sync::mpsc::Receiver<Event<T>>>,
+    ws_receiver:Option<WsReceiver>,
 
     /// The state of the connection
-    state:State
+    state:State,
+
+    phantom:PhantomData<T>
 }
 
 impl<T:Msg> Default for Client<T> {
     fn default() -> Self {
-        Self { url:Default::default(), join_handle:None, ws_sender:None, event_receiver:None, state:State::Disconnected }
+        Self { url:Default::default(), ws_sender:None, ws_receiver:None, state:State::Disconnected, phantom:Default::default() }
     }
 }
 
@@ -46,7 +45,7 @@ impl<T:Msg> Client<T> {
     /// Connect to the websocket server
     /// 
     /// Will try to connect forever and will re-connect in case of disconnections. 
-    pub async fn connect(&mut self, url:impl Into<String>) {
+    /*pub async fn connect(&mut self, url:impl Into<String>) {
         self.disconnect().await;
         let url:String = url.into();
         self.url.clone_from(&url);
@@ -114,9 +113,28 @@ impl<T:Msg> Client<T> {
                 tokio::time::sleep(Duration::from_secs(2)).await;
             }
         }));
+    }*/
+
+    /// Connect to the websocket server
+    /// 
+    /// Will try to connect forever and will re-connect in case of disconnections. 
+    pub fn connect(&mut self, url:impl Into<String>) {
+        self.disconnect();
+        let url:String = url.into();
+        self.url.clone_from(&url);
     }
 
-    pub async fn disconnect(&mut self) {
+    /// Connect to the websocket server
+    /// 
+    /// Will try to connect forever and will re-connect in case of disconnections. 
+    pub fn disconnect(&mut self) {
+        self.ws_receiver = None;
+        self.ws_sender = None;
+        self.url = String::default();
+        self.state = State::Disconnected;
+    }
+
+   /* pub async fn disconnect(&mut self) {
         if let Some(join_handle) = self.join_handle.take() {
             join_handle.abort();
             let _ = join_handle.await;
@@ -124,7 +142,7 @@ impl<T:Msg> Client<T> {
             self.ws_sender = None;
             self.event_receiver = None;
         }
-    }
+    }*/
 
     /// Sends a message to the server
     /// 
@@ -134,40 +152,82 @@ impl<T:Msg> Client<T> {
             return false;
         }
 
-        match &mut self.ws_sender {
-            Some(sender) => {
-
-                sender.try_send(msg).is_ok()
-            },
-            None => {
-                false
-            },
+        if let Some(ws_sender) = &mut self.ws_sender {
+            match bincode::serialize(&msg) {
+                Ok(msg) => {
+                    ws_sender.send(ewebsock::WsMessage::Binary(msg));
+                    return true;
+                },
+                Err(_) => {
+                    return false;
+                },
+            }
         }
+
+        false
     }
 
     /// Collect and process events
     /// 
     /// Returns the processed events which can be further processed by the calling application 
     pub fn poll(&mut self) -> Vec<Event<T>> {
+        if self.url.is_empty() {
+            return Default::default();
+        }
+
         let mut events = Vec::with_capacity(32);
-        let Some(event_receiver) = &mut self.event_receiver else { return events };
-        let waker = noop_waker::noop_waker();
-        let mut cx = std::task::Context::from_waker(&waker);
-        while let core::task::Poll::Ready(Some(v)) = event_receiver.poll_recv(&mut cx) {
-            match &v {
-                Event::Connecting => {
-                    self.state = State::Disconnected;
-                },
-                Event::Connected => {
-                    self.state = State::Connected;
-                },
-                Event::Disconnected => {
-                    self.state = State::Disconnected;
-                },
-                Event::Message(_) => {
-                },
+        if self.ws_sender.is_none() {
+            let socket = ewebsock::connect(&self.url, ewebsock::Options {
+                ..Default::default()
+            });
+            if let Ok((ws_sender, ws_receiver)) = socket {
+                self.ws_sender = Some(ws_sender);
+                self.ws_receiver = Some(ws_receiver);
             }
-            events.push(v);
+            events.push(Event::Connecting);
+        }
+
+        let mut recreate_socket = false;
+
+        if let Some(ws_receiver) = &mut self.ws_receiver {
+            while let Some(msg) = ws_receiver.try_recv() {
+                match msg {
+                    ewebsock::WsEvent::Opened => {
+                        events.push(Event::Connected);
+                        self.state = State::Connected;
+                    },
+                    ewebsock::WsEvent::Message(msg) => match msg {
+                        ewebsock::WsMessage::Binary(msg) => {
+                            let msg = bincode::deserialize(&msg);
+                            match msg {
+                                Ok(msg) => {
+                                    events.push(Event::Message(msg));
+                                },
+                                Err(_) => {
+                                    recreate_socket = true;
+                                },
+                            };
+                        },
+                        _ => {}
+                    },
+                    ewebsock::WsEvent::Error(_err) => {
+                        recreate_socket = true;
+                    },
+                    ewebsock::WsEvent::Closed => {
+                        recreate_socket = true;
+                    },
+                }
+            }
+        }
+
+        if recreate_socket {
+            self.ws_sender = None;
+            self.ws_receiver = None;
+            if self.state == State::Connected {
+                events.push(Event::Disconnected);
+            }
+
+            self.state = State::Disconnected;
         }
 
         events

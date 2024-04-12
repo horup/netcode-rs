@@ -36,7 +36,7 @@ pub fn spawn_client() {
     tokio::spawn(async {
         use netcode::client::*;
         let mut client = Client::default() as Client<Msg>;
-        client.connect("ws://localhost:8080").await;
+        client.connect("ws://localhost:8080");
         let tick_rate = 20;
         let target = Duration::from_millis(1000 / tick_rate);
         let mut players = HashMap::default() as HashMap<u64, Player>;

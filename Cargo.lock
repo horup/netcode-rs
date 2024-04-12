@@ -115,9 +115,7 @@ dependencies = [
  "bincode",
  "common",
  "ewebsock",
- "noop-waker",
  "serde",
- "tokio",
  "tokio-test",
  "tokio-util",
 ]
