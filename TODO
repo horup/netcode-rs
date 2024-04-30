@@ -1,3 +1,3 @@
 ☐ make tokio a future that can be enabled and disabled
-☐ implement json support instead of binary for when targeting the web
+✔ implement json support instead of binary for when targeting the web @done(24-04-30 10:42)
 ☐ implement typescript support when targeting json
