@@ -2,6 +2,18 @@ use std::time::Instant;
 
 use serde::{de::DeserializeOwned, Serialize};
 
+/// Messaging format used
+pub enum Format {
+    Bincode,
+    Json
+}
+
+impl Default for Format {
+    fn default() -> Self {
+        Self::Bincode
+    }
+}
+
 /// Serializable message between `Client` and `Server`
 pub trait Msg: Send + Sync + Clone + Serialize + DeserializeOwned + 'static {}
 impl<T> Msg for T where T: Send + Sync + Clone + Serialize + DeserializeOwned + 'static {}

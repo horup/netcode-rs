@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::Debug};
 
-use common::Metrics;
+use common::{Format, Metrics};
 use futures::sink::SinkExt;
 use futures::stream::StreamExt;
 use http_body_util::Full;
@@ -54,6 +54,8 @@ pub enum Event<T> {
 
 /// `Server` part of `netcode`
 pub struct Server<T: common::Msg> {
+    /// Format used by the server
+    format:Format,
     /// The address which the server is currently listening to
     listener_addr: Option<std::net::SocketAddr>,
     /// Token to cancel listening
@@ -75,6 +77,7 @@ impl<T: common::Msg> Drop for Server<T> {
 impl<T: common::Msg> Default for Server<T> {
     fn default() -> Self {
         Self {
+            format:Format::default(),
             listener_addr: None,
             cancellation_token: None,
             event_receiver: None,
@@ -224,6 +227,11 @@ impl<T: common::Msg> Server<T> {
                 false
             }
         }
+    }
+
+    pub fn with_format(mut self, format:Format) -> Self {
+        self.format = format;
+        self
     }
 
     /// Send a message to a client.

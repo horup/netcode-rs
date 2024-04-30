@@ -1,5 +1,5 @@
 use std::marker::PhantomData;
-use common::Msg;
+use common::{Format, Msg};
 use ewebsock::{WsReceiver, WsSender};
 
 #[derive(Debug)]
@@ -20,6 +20,8 @@ pub enum State {
 /// `Client` for `netcode`
 /// The client will autoconnect to the server and try to keep connected
 pub struct Client<T> {
+    /// Messaging format used
+    format:Format,
     /// Address to connect to
     url:String,
 
@@ -37,7 +39,7 @@ pub struct Client<T> {
 
 impl<T:Msg> Default for Client<T> {
     fn default() -> Self {
-        Self { url:Default::default(), ws_sender:None, ws_receiver:None, state:State::Disconnected, phantom:Default::default() }
+        Self { url:Default::default(), ws_sender:None, ws_receiver:None, state:State::Disconnected, phantom:Default::default(), format:Format::Bincode }
     }
 }
 
@@ -114,6 +116,11 @@ impl<T:Msg> Client<T> {
             }
         }));
     }*/
+
+    pub fn with_format(mut self, format:Format) -> Self {
+        self.format = format;
+        self
+    }
 
     /// Connect to the websocket server
     /// 
