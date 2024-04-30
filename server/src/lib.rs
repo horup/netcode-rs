@@ -89,7 +89,7 @@ impl<T: common::Msg> Default for Server<T> {
 type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
 impl<T: common::Msg> Server<T> {
     /// Handle a websocket connection.
-    async fn spawn_client(websocket: HyperWebsocket, event_sender:UnboundedSender<InternalEvent<T>>, client_id:ClientId, cancellation_token: CancellationToken) -> Result<(), Error> {
+    async fn spawn_client(websocket: HyperWebsocket, event_sender:UnboundedSender<InternalEvent<T>>, client_id:ClientId, cancellation_token: CancellationToken, format:Format) -> Result<(), Error> {
         let websocket = websocket.await?;
         let (mut sink, mut stream) = websocket.split();
         // spawn a sender task
@@ -102,7 +102,6 @@ impl<T: common::Msg> Server<T> {
 
         let _ = event_sender.send(InternalEvent::ClientConnected { client_id, sink: msg_sender });
         // use current task to read messages from the socket
-
         loop {
             tokio::select! {
                 _ = cancellation_token.cancelled() => {
@@ -115,14 +114,28 @@ impl<T: common::Msg> Server<T> {
                                 Ok(message) => {
                                     match message {
                                         Message::Binary(bincoded) => {
-                                            let len = bincoded.len();
-                                            let msg = bincode::deserialize(&bincoded) as Result<T, _>;
-                                            match msg {
-                                                Ok(msg) => {
-                                                    let _ = event_sender.send(InternalEvent::Message { client_id, msg, len });
+                                            if let Format::Bincode = format {
+                                                let len = bincoded.len();
+                                                let msg = bincode::deserialize(&bincoded) as Result<T, _>;
+                                                match msg {
+                                                    Ok(msg) => {
+                                                        let _ = event_sender.send(InternalEvent::Message { client_id, msg, len });
+                                                    }
+                                                    Err(_) => {
+                                                        break;
+                                                    }
                                                 }
-                                                Err(_) => {
-                                                    break;
+                                            }
+                                        },
+                                        Message::Text(text) => {
+                                            if let Format::Json = format {
+                                                let len = text.len();
+                                                let msg = serde_json::from_str(&text) as Result<T, _>;
+                                                match msg {
+                                                    Ok(msg) =>{
+                                                        let _ = event_sender.send(InternalEvent::Message { client_id, msg, len });
+                                                    },
+                                                    Err(_) => todo!(),
                                                 }
                                             }
                                         },
@@ -154,12 +167,13 @@ impl<T: common::Msg> Server<T> {
         mut request: Request<Incoming>,
         event_sender:UnboundedSender<InternalEvent<T>>,
         client_id:ClientId,
-        cancellation_token: CancellationToken
+        cancellation_token: CancellationToken,
+        format:Format
     ) -> Result<Response<Full<Bytes>>, Error> {
         if hyper_tungstenite::is_upgrade_request(&request) {
             let (response, websocket) = hyper_tungstenite::upgrade(&mut request, None)?;
             tokio::spawn(async move {
-                let _ = Self::spawn_client(websocket, event_sender, client_id, cancellation_token).await;
+                let _ = Self::spawn_client(websocket, event_sender, client_id, cancellation_token, format).await;
             });
             Ok(response) as Result<Response<Full<Bytes>>, _>
         } else {
@@ -170,7 +184,7 @@ impl<T: common::Msg> Server<T> {
     /// spawns tcp listener which accepts tcp connects
     /// 
     /// accepted connections are passed to a task where they are upgraded into http requests
-    fn spawn_listener(cancellation_token: CancellationToken, listener: TcpListener, event_sender:UnboundedSender<InternalEvent<T>>) {
+    fn spawn_listener(cancellation_token: CancellationToken, listener: TcpListener, event_sender:UnboundedSender<InternalEvent<T>>, format:Format) {
         tokio::spawn(async move {
             let mut next_client_id = 1;
             loop {
@@ -191,7 +205,7 @@ impl<T: common::Msg> Server<T> {
                                 let connection = http_builder.serve_connection(hyper_util::rt::TokioIo::new(stream), hyper::service::service_fn(|request| {
                                     let event_sender = event_sender.clone();
                                     let cancellation_token = cancellation_token.clone();
-                                    Self::handle_request(request, event_sender, client_id, cancellation_token)
+                                    Self::handle_request(request, event_sender, client_id, cancellation_token, format)
                                 }))
                                 .with_upgrades();
                                 let _ = connection.await;
@@ -220,7 +234,7 @@ impl<T: common::Msg> Server<T> {
                 http.keep_alive(true);
                 let cancellation_token = CancellationToken::new();
                 self.cancellation_token = Some(cancellation_token.clone());
-                Self::spawn_listener(cancellation_token, listener, event_sender);
+                Self::spawn_listener(cancellation_token, listener, event_sender, self.format);
                 true
             }
             Err(_) => {
@@ -239,10 +253,21 @@ impl<T: common::Msg> Server<T> {
     /// Returns `true` if the message was sent (but not neccesarily received)
     pub fn send(&mut self, client_id:impl Into<ClientId>, msg:T) -> bool {
         if let Some(client) = self.clients.get_mut(&client_id.into()) {
-            let Ok(bincoded) = bincode::serialize(&msg) else { return false };
-            self.metrics.add_send(bincoded.len());
-            let r = client.sink.send(Message::Binary(bincoded));
-            return r.is_ok();
+            match self.format {
+                Format::Bincode => {
+                    let Ok(bincoded) = bincode::serialize(&msg) else { return false };
+                    self.metrics.add_send(bincoded.len());
+                    let r = client.sink.send(Message::Binary(bincoded));
+                    return r.is_ok();
+                },
+                Format::Json => {
+                    let Ok(json) = serde_json::to_string(&msg) else { return false };
+                    self.metrics.add_send(json.len());
+                    let r = client.sink.send(Message::Text(json));
+                    return r.is_ok();
+                },
+            }
+            
         }
 
         false

@@ -3,6 +3,7 @@ use std::time::Instant;
 use serde::{de::DeserializeOwned, Serialize};
 
 /// Messaging format used
+#[derive(PartialEq, Eq, Clone, Copy)]
 pub enum Format {
     Bincode,
     Json
