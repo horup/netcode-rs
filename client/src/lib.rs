@@ -160,15 +160,30 @@ impl<T:Msg> Client<T> {
         }
 
         if let Some(ws_sender) = &mut self.ws_sender {
-            match bincode::serialize(&msg) {
-                Ok(msg) => {
-                    ws_sender.send(ewebsock::WsMessage::Binary(msg));
-                    return true;
+            match self.format {
+                Format::Bincode => {
+                    match bincode::serialize(&msg) {
+                        Ok(msg) => {
+                            ws_sender.send(ewebsock::WsMessage::Binary(msg));
+                            return true;
+                        },
+                        Err(_) => {
+                            return false;
+                        },
+                    }
                 },
-                Err(_) => {
-                    return false;
+                Format::Json => {
+                    match serde_json::to_string(&msg) {
+                        Ok(json) => {
+                            ws_sender.send(ewebsock::WsMessage::Text(json));
+                        },
+                        Err(_) => {
+                            return false;
+                        },
+                    }
                 },
             }
+            
         }
 
         false
@@ -210,15 +225,30 @@ impl<T:Msg> Client<T> {
                     },
                     ewebsock::WsEvent::Message(msg) => match msg {
                         ewebsock::WsMessage::Binary(msg) => {
-                            let msg = bincode::deserialize(&msg);
-                            match msg {
-                                Ok(msg) => {
-                                    events.push(Event::Message(msg));
-                                },
-                                Err(_) => {
-                                    recreate_socket = true;
-                                },
-                            };
+                            if let Format::Bincode = self.format {
+                                let msg = bincode::deserialize(&msg);
+                                match msg {
+                                    Ok(msg) => {
+                                        events.push(Event::Message(msg));
+                                    },
+                                    Err(_) => {
+                                        recreate_socket = true;
+                                    },
+                                };
+                            }
+                        },
+                        ewebsock::WsMessage::Text(msg) => {
+                            if let Format::Json = self.format {
+                                let msg = serde_json::from_str(&msg);
+                                match msg {
+                                    Ok(msg) => {
+                                        events.push(Event::Message(msg));
+                                    },
+                                    Err(_) => {
+                                        recreate_socket = true;
+                                    },
+                                };
+                            }
                         },
                         _ => {}
                     },

@@ -116,6 +116,7 @@ dependencies = [
  "common",
  "ewebsock",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

@@ -8,3 +8,4 @@ ewebsock = {workspace = true}
 common = {path = "../common"}
 bincode = { workspace = true }
 serde = { workspace = true }
+serde_json ={ workspace = true }
