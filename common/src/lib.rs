@@ -15,6 +15,7 @@ impl Default for Format {
     }
 }
 
+/// Trait messages must implement to ensure they can be serialized as `Binary` or as `Json`
 pub trait SerializableMessage : Clone + Send + Sync + 'static {
     fn to_bytes(&self) -> Result<Vec<u8>, ()>;
     fn from_bytes(bytes:&[u8]) -> Result<Self, ()>;
@@ -22,6 +23,7 @@ pub trait SerializableMessage : Clone + Send + Sync + 'static {
     fn from_json(json:&str) -> Result<Self, ()>;
 }
 
+/// SerializableMessage is implemented for types that are serde serialiazable
 impl<T> SerializableMessage for T where T: Serialize + DeserializeOwned + Sync + Send + Clone + 'static {
     fn to_bytes(&self) -> Result<Vec<u8>, ()> {
         bincode::serialize(self).map_err(|_|())
