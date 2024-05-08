@@ -1,5 +1,5 @@
 use std::marker::PhantomData;
-use common::{Format, Msg};
+use common::{Format, SerializableMessage};
 use ewebsock::{WsReceiver, WsSender};
 
 #[derive(Debug)]
@@ -37,13 +37,13 @@ pub struct Client<T> {
     phantom:PhantomData<T>
 }
 
-impl<T:Msg> Default for Client<T> {
+impl<T:SerializableMessage> Default for Client<T> {
     fn default() -> Self {
-        Self { url:Default::default(), ws_sender:None, ws_receiver:None, state:State::Disconnected, phantom:Default::default(), format:Format::Bincode }
+        Self { url:Default::default(), ws_sender:None, ws_receiver:None, state:State::Disconnected, phantom:Default::default(), format:Format::Binary }
     }
 }
 
-impl<T:Msg> Client<T> {
+impl<T:SerializableMessage> Client<T> {
     /// Connect to the websocket server
     /// 
     /// Will try to connect forever and will re-connect in case of disconnections. 
@@ -161,8 +161,8 @@ impl<T:Msg> Client<T> {
 
         if let Some(ws_sender) = &mut self.ws_sender {
             match self.format {
-                Format::Bincode => {
-                    match bincode::serialize(&msg) {
+                Format::Binary => {
+                    match msg.to_bytes() {
                         Ok(msg) => {
                             ws_sender.send(ewebsock::WsMessage::Binary(msg));
                             return true;
@@ -173,7 +173,7 @@ impl<T:Msg> Client<T> {
                     }
                 },
                 Format::Json => {
-                    match serde_json::to_string(&msg) {
+                    match msg.to_json() {
                         Ok(json) => {
                             ws_sender.send(ewebsock::WsMessage::Text(json));
                         },
@@ -225,8 +225,8 @@ impl<T:Msg> Client<T> {
                     },
                     ewebsock::WsEvent::Message(msg) => match msg {
                         ewebsock::WsMessage::Binary(msg) => {
-                            if let Format::Bincode = self.format {
-                                let msg = bincode::deserialize(&msg);
+                            if let Format::Binary = self.format {
+                                let msg = T::from_bytes(&msg);
                                 match msg {
                                     Ok(msg) => {
                                         events.push(Event::Message(msg));
@@ -239,7 +239,7 @@ impl<T:Msg> Client<T> {
                         },
                         ewebsock::WsMessage::Text(msg) => {
                             if let Format::Json = self.format {
-                                let msg = serde_json::from_str(&msg);
+                                let msg = T::from_json(&msg);
                                 match msg {
                                     Ok(msg) => {
                                         events.push(Event::Message(msg));

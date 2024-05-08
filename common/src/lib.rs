@@ -5,28 +5,24 @@ use serde::{de::DeserializeOwned, Serialize};
 /// Messaging format used
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum Format {
-    Bincode,
+    Binary,
     Json
 }
 
 impl Default for Format {
     fn default() -> Self {
-        Self::Bincode
+        Self::Binary
     }
 }
 
-/// Serializable message between `Client` and `Server`
-pub trait Msg: Send + Sync + Clone + Serialize + DeserializeOwned + 'static {}
-impl<T> Msg for T where T: Send + Sync + Clone + Serialize + DeserializeOwned + 'static {}
-
-pub trait SerializableMessage : Clone + Send + Sync {
+pub trait SerializableMessage : Clone + Send + Sync + 'static {
     fn to_bytes(&self) -> Result<Vec<u8>, ()>;
     fn from_bytes(bytes:&[u8]) -> Result<Self, ()>;
     fn to_json(&self) -> Result<String, ()>;
     fn from_json(json:&str) -> Result<Self, ()>;
 }
 
-impl<T> SerializableMessage for T where T: Serialize + DeserializeOwned + Sync + Send + Clone {
+impl<T> SerializableMessage for T where T: Serialize + DeserializeOwned + Sync + Send + Clone + 'static {
     fn to_bytes(&self) -> Result<Vec<u8>, ()> {
         bincode::serialize(self).map_err(|_|())
     }

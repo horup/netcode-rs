@@ -53,7 +53,7 @@ pub enum Event<T> {
 }
 
 /// `Server` part of `netcode`
-pub struct Server<T: common::Msg> {
+pub struct Server<T: common::SerializableMessage> {
     /// Format used by the server
     format:Format,
     /// The address which the server is currently listening to
@@ -67,14 +67,14 @@ pub struct Server<T: common::Msg> {
     pub metrics:Metrics
 }
 
-impl<T: common::Msg> Drop for Server<T> {
+impl<T: common::SerializableMessage> Drop for Server<T> {
     fn drop(&mut self) {
         if let Some(cancellation_token) = &mut self.cancellation_token {
             cancellation_token.cancel();
         }
     }
 }
-impl<T: common::Msg> Default for Server<T> {
+impl<T: common::SerializableMessage> Default for Server<T> {
     fn default() -> Self {
         Self {
             format:Format::default(),
@@ -87,7 +87,7 @@ impl<T: common::Msg> Default for Server<T> {
     }
 }
 type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
-impl<T: common::Msg> Server<T> {
+impl<T: common::SerializableMessage> Server<T> {
     /// Handle a websocket connection.
     async fn spawn_client(websocket: HyperWebsocket, event_sender:UnboundedSender<InternalEvent<T>>, client_id:ClientId, cancellation_token: CancellationToken, format:Format) -> Result<(), Error> {
         let websocket = websocket.await?;
@@ -113,10 +113,10 @@ impl<T: common::Msg> Server<T> {
                             match message {
                                 Ok(message) => {
                                     match message {
-                                        Message::Binary(bincoded) => {
-                                            if let Format::Bincode = format {
-                                                let len = bincoded.len();
-                                                let msg = bincode::deserialize(&bincoded) as Result<T, _>;
+                                        Message::Binary(bin) => {
+                                            if let Format::Binary = format {
+                                                let len = bin.len();
+                                                let msg = T::from_bytes(&bin) as Result<T, _>;
                                                 match msg {
                                                     Ok(msg) => {
                                                         let _ = event_sender.send(InternalEvent::Message { client_id, msg, len });
@@ -130,7 +130,7 @@ impl<T: common::Msg> Server<T> {
                                         Message::Text(text) => {
                                             if let Format::Json = format {
                                                 let len = text.len();
-                                                let msg = serde_json::from_str(&text) as Result<T, _>;
+                                                let msg = T::from_json(&text) as Result<T, _>;
                                                 match msg {
                                                     Ok(msg) =>{
                                                         let _ = event_sender.send(InternalEvent::Message { client_id, msg, len });
@@ -254,14 +254,14 @@ impl<T: common::Msg> Server<T> {
     pub fn send(&mut self, client_id:impl Into<ClientId>, msg:T) -> bool {
         if let Some(client) = self.clients.get_mut(&client_id.into()) {
             match self.format {
-                Format::Bincode => {
-                    let Ok(bincoded) = bincode::serialize(&msg) else { return false };
-                    self.metrics.add_send(bincoded.len());
-                    let r = client.sink.send(Message::Binary(bincoded));
+                Format::Binary => {
+                    let Ok(bin) = msg.to_bytes() else { return false };
+                    self.metrics.add_send(bin.len());
+                    let r = client.sink.send(Message::Binary(bin));
                     return r.is_ok();
                 },
                 Format::Json => {
-                    let Ok(json) = serde_json::to_string(&msg) else { return false };
+                    let Ok(json) = msg.to_json() else { return false };
                     self.metrics.add_send(json.len());
                     let r = client.sink.send(Message::Text(json));
                     return r.is_ok();
