@@ -33,5 +33,5 @@ serde_json = "1.0.116"
 ewebsock = {version = "0.5.0", features = ["tls"]}
 noop-waker = "0.1.0"
 tokio = {version = "1.36", features = ["rt", "time", "sync", "macros", "rt-multi-thread"]}
-
+prost = "0.12.4"
 
