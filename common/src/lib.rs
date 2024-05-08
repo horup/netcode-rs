@@ -19,6 +19,31 @@ impl Default for Format {
 pub trait Msg: Send + Sync + Clone + Serialize + DeserializeOwned + 'static {}
 impl<T> Msg for T where T: Send + Sync + Clone + Serialize + DeserializeOwned + 'static {}
 
+pub trait SerializableMessage : Clone + Send + Sync {
+    fn to_bytes(&self) -> Result<Vec<u8>, ()>;
+    fn from_bytes(bytes:&[u8]) -> Result<Self, ()>;
+    fn to_json(&self) -> Result<String, ()>;
+    fn from_json(json:&str) -> Result<Self, ()>;
+}
+
+impl<T> SerializableMessage for T where T: Serialize + DeserializeOwned + Sync + Send + Clone {
+    fn to_bytes(&self) -> Result<Vec<u8>, ()> {
+        bincode::serialize(self).map_err(|_|())
+    }
+
+    fn from_bytes(bytes:&[u8]) -> Result<Self, ()> {
+        bincode::deserialize(bytes).map_err(|_|())
+    }
+
+    fn to_json(&self) -> Result<String, ()> {
+        serde_json::to_string(self).map_err(|_|())
+    }
+
+    fn from_json(json:&str) -> Result<Self, ()> {
+        serde_json::from_str(json).map_err(|_|())
+    }
+} 
+
 /// Struct holdning common network metric information
 pub struct Metrics {
     instant: Instant,
