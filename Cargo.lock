@@ -112,11 +112,9 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 name = "client"
 version = "0.1.0"
 dependencies = [
- "bincode",
  "common",
  "ewebsock",
  "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -697,7 +695,6 @@ dependencies = [
 name = "server"
 version = "0.1.0"
 dependencies = [
- "bincode",
  "common",
  "futures",
  "http-body-util",
@@ -705,7 +702,6 @@ dependencies = [
  "hyper-tungstenite",
  "hyper-util",
  "noop-waker",
- "serde_json",
  "tokio",
  "tokio-test",
  "tokio-util",
