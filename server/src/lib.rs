@@ -40,7 +40,7 @@ pub struct Client {
     //pub sink:futures::prelude::stream::SplitSink<hyper_tungstenite::WebSocketStream<hyper_util::rt::TokioIo<hyper::upgrade::Upgraded>>, Message>
 }
 
-pub enum InternalEvent<T> {
+enum InternalEvent<T> {
     ClientConnected { client_id: ClientId, sink:tokio::sync::mpsc::UnboundedSender<Message> },
     ClientDisconnected { client_id: ClientId },
     Message { client_id: ClientId, msg: T, len:usize },
