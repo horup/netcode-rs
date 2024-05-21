@@ -5,13 +5,13 @@ use server::{ClientId, Event, Server};
 /// Hosts a single `server` acting as master for instances.
 /// 
 /// A client initially connects to the master and then through the master is directed to an instance.
-pub struct MasterServer<T> where T:SerializableMessage {
+pub struct MasterServer<T, I> where T:SerializableMessage, I:Instance<T> {
     server:Server<T>,
-    instances:HashMap<InstanceId, Instance<T>>,
+    instances:HashMap<InstanceId, I>,
     client_instances:HashMap<ClientId, Option<InstanceId>>
 }
 
-impl<T:SerializableMessage> MasterServer<T> {
+impl<T:SerializableMessage, I:Instance<T>> MasterServer<T, I> {
     pub fn new(server:Server<T>) -> Self {
         Self {
             server,
@@ -30,7 +30,7 @@ impl<T:SerializableMessage> MasterServer<T> {
     /// `Instances` where they can be handled by the respective `Instance`
     /// 
     /// Returns events that do not belong to an `instance`.
-    pub fn pool(&mut self) -> Vec<Event<T>> {
+    pub fn poll(&mut self) -> Vec<Event<T>> {
         let mut master_events = Vec::with_capacity(8);
         let mut instances = std::mem::take(&mut self.instances);
         let events = self.server.poll();
@@ -38,7 +38,7 @@ impl<T:SerializableMessage> MasterServer<T> {
             match self.client_instance(client_id) {
                 Some(instance_id) => {
                     let Some(instance) = instances.get_mut(&instance_id) else { return };
-                    instance.rx.push(e);
+                    instance.tx(e);
                 },
                 None => master_events.push(e),
             }
@@ -64,12 +64,12 @@ impl<T:SerializableMessage> MasterServer<T> {
 
 #[derive(Clone, Copy, PartialEq, PartialOrd, Hash, Eq)]
 pub struct InstanceId(u64);
-pub struct Instance<T:SerializableMessage> {
-    /// nuff said
-    pub id:InstanceId,
-    /// events received by the master server
-    pub rx:Vec<Event<T>>,
+pub trait Instance<T:SerializableMessage> {
+    /// send event into the instance
+    fn tx(&mut self, t:Event<T>);
 
-    /// events produced by the instance
-    pub tx:Vec<Event<T>>
+    /// poll the instance, producing x number of events that can be processed
+    fn poll(&mut self) -> Vec<Event<T>>;
 }
+
+
