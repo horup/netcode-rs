@@ -68,7 +68,7 @@ pub trait Instance<T:SerializableMessage> {
     /// send `Event` into the instance
     fn tx(&mut self, t:Event<T>);
 
-    /// poll the `Instance`, producing x number of events that can be processed
+    /// poll the `Instance`, producing x number of events that needs to be processed
     fn poll(&mut self) -> Vec<Event<T>>;
 }
 
