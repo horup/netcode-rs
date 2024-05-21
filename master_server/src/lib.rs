@@ -65,10 +65,10 @@ impl<T:SerializableMessage, I:Instance<T>> MasterServer<T, I> {
 #[derive(Clone, Copy, PartialEq, PartialOrd, Hash, Eq)]
 pub struct InstanceId(u64);
 pub trait Instance<T:SerializableMessage> {
-    /// send event into the instance
+    /// send `Event` into the instance
     fn tx(&mut self, t:Event<T>);
 
-    /// poll the instance, producing x number of events that can be processed
+    /// poll the `Instance`, producing x number of events that can be processed
     fn poll(&mut self) -> Vec<Event<T>>;
 }
 
