@@ -1,31 +1,75 @@
 use std::{collections::HashMap, ops::{Deref, DerefMut}};
 use common::SerializableMessage;
-use server::Server;
+use server::{ClientId, Event, Server};
 
 /// Hosts a single `server` acting as master for instances.
 /// 
 /// A client initially connects to the master and then through the master is directed to an instance.
 pub struct MasterServer<T> where T:SerializableMessage {
-    pub server:Server<T>,
-    pub instances:HashMap<InstanceId, Instance<T>>
+    server:Server<T>,
+    instances:HashMap<InstanceId, Instance<T>>,
+    client_instances:HashMap<ClientId, Option<InstanceId>>
 }
 
 impl<T:SerializableMessage> MasterServer<T> {
     pub fn new(server:Server<T>) -> Self {
         Self {
             server,
-            instances:Default::default()
+            instances:Default::default(),
+            client_instances:Default::default()
         }
     }
-    pub fn pool(&mut self) {
+
+    /// Returns the `InstanceId`, if any, that the client with the given `ClientId` belongs.
+    pub fn client_instance(&self, client_id:ClientId) -> Option<InstanceId> {
+        let instance_id = self.client_instances.get(&client_id)?.as_ref()?;
+        Some(instance_id.to_owned())
+    }
+
+    /// Pools the master server, which ensures events will be propergated to the respective 
+    /// `Instances` where they can be handled by the respective `Instance`
+    /// 
+    /// Returns events that do not belong to an `instance`.
+    pub fn pool(&mut self) -> Vec<Event<T>> {
+        let mut master_events = Vec::with_capacity(8);
+        let mut instances = std::mem::take(&mut self.instances);
+        let events = self.server.poll();
+        let mut process_event = |e, client_id| {
+            match self.client_instance(client_id) {
+                Some(instance_id) => {
+                    let Some(instance) = instances.get_mut(&instance_id) else { return };
+                    instance.rx.push(e);
+                },
+                None => master_events.push(e),
+            }
+        };
+        for e in events {
+            match e {
+                server::Event::ClientConnected { client_id } => {
+                    process_event(e, client_id);
+                },
+                server::Event::ClientDisconnected { client_id } => {
+                    process_event(e, client_id);
+                },
+                server::Event::Message { client_id, .. } => {
+                    process_event(e, client_id);
+                },
+            }
+        }
         
+        self.instances = instances;
+        master_events
     }
 }
 
-#[derive(Clone, Copy, PartialEq, PartialOrd, Hash)]
+#[derive(Clone, Copy, PartialEq, PartialOrd, Hash, Eq)]
 pub struct InstanceId(u64);
 pub struct Instance<T:SerializableMessage> {
+    /// nuff said
     pub id:InstanceId,
-    pub rx:Vec<T>,
-    pub tx:Vec<T>
+    /// events received by the master server
+    pub rx:Vec<Event<T>>,
+
+    /// events produced by the instance
+    pub tx:Vec<Event<T>>
 }
