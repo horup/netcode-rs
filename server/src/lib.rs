@@ -52,6 +52,7 @@ pub enum Event<T> {
     Message { client_id: ClientId, msg: T }
 }
 
+
 /// `Server` part of `netcode`
 pub struct Server<T: common::SerializableMessage> {
     /// Format used by the server

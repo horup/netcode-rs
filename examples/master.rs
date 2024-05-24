@@ -33,8 +33,17 @@ async fn main() {
         let mut instances:Vec<Instance> = Vec::new();
         loop {
             let events = master_server.poll();
-            for _e in events {
-    
+            for e in events {
+                match e {
+                    Event::ClientConnected { client_id } => {
+                    },
+                    Event::ClientDisconnected { client_id } => {
+
+                    },
+                    Event::Message { client_id, msg } => {
+                        
+                    },
+                }
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
