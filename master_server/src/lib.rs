@@ -11,8 +11,8 @@ pub enum InstanceEvent<T> {
 pub enum MasterEvent<T> {
     ClientConnected {client_id:ClientId}, 
     ClientDisconnected {client_id:ClientId},
-    ClientJoinedInstance {client_id:ClientId, instance_id:InstanceId},
     ClientLeftInstance {client_id:ClientId, instance_id:InstanceId},
+    ClientJoinedInstance {client_id:ClientId, instance_id:InstanceId},
     Message { client_id: ClientId, msg: T }
 }
 
@@ -22,7 +22,9 @@ pub enum MasterEvent<T> {
 pub struct MasterServer<T, I> where T:SerializableMessage, I:Instance<T> {
     server:Server<T>,
     instances:HashMap<InstanceId, I>,
-    client_instances:HashMap<ClientId, InstanceId>
+    client_instances:HashMap<ClientId, InstanceId>,
+    next_instance_id:u64,
+    events:Vec<MasterEvent<T>>
 }
 
 impl<T:SerializableMessage, I:Instance<T>> MasterServer<T, I> {
@@ -30,8 +32,31 @@ impl<T:SerializableMessage, I:Instance<T>> MasterServer<T, I> {
         Self {
             server,
             instances:Default::default(),
-            client_instances:Default::default()
+            client_instances:Default::default(),
+            next_instance_id:1,
+            events:Default::default()
         }
+    }
+
+    /// Pushes a new instance, which will be periodically polled by the `MasterServer`
+    pub fn push_instance(&mut self, instance:I) -> InstanceId {
+        let id = InstanceId(self.next_instance_id);
+        self.next_instance_id += 1;
+        self.instances.insert(id, instance);
+        id
+    }
+
+    /// Removes the given instance.
+    /// 
+    /// Will move all clients from the instance
+    pub fn remove_instance(&mut self, instance_id:InstanceId) -> Option<I> {
+        let client_instances = self.client_instances.clone();
+        for (client_id, instance_id2) in client_instances.iter() {
+            if &instance_id == instance_id2 {
+                self.leave_instance(client_id.to_owned());
+            }
+        }
+        self.instances.remove(&instance_id)
     }
 
     /// Returns the `InstanceId`, if any, that the client with the given `ClientId` belongs.
@@ -44,11 +69,23 @@ impl<T:SerializableMessage, I:Instance<T>> MasterServer<T, I> {
     /// 
     /// Returns the `InstanceId` of the instance the client had joined
     pub fn leave_instance(&mut self, client_id:ClientId) -> Option<InstanceId> {
-        self.client_instances.remove(&client_id)
+        match self.client_instances.remove(&client_id) {
+            Some(iid) => {
+                self.events.push(MasterEvent::ClientLeftInstance { client_id: client_id, instance_id: iid });
+                return Some(iid);
+            },
+            None => return None,
+        };
     }
 
-    pub fn join_instance(&mut self, client_id:ClientId, instance_id:InstanceId) {
-
+    /// Add the client to the `Instance` denoted by `instance_id`
+    /// 
+    /// Returns the previous `Instance` that the client was part of. 
+    pub fn join_instance(&mut self, client_id:ClientId, instance_id:InstanceId) -> Option<InstanceId> {
+        let old_instance = self.leave_instance(client_id);
+        self.client_instances.insert(client_id, instance_id);
+        self.events.push(MasterEvent::ClientJoinedInstance { client_id: client_id, instance_id: instance_id });
+        old_instance
     }
 
     /// Poll the master server, which ensures events will be propergated to and from the respective instances.
@@ -56,11 +93,11 @@ impl<T:SerializableMessage, I:Instance<T>> MasterServer<T, I> {
     /// Returns events that were not processed in an `instance` i.e. which belongs to the master server itself.
     /// These events needs to be processed by the underlying application.
     pub fn poll(&mut self) -> Vec<MasterEvent<T>> {
-        let mut master_events:Vec<MasterEvent<T>> = Vec::with_capacity(8);
         let mut instances = std::mem::take(&mut self.instances);
         let server_events = self.server.poll();
+        let mut master_events = std::mem::take(&mut self.events);
 
-        for (iid, instance) in instances.iter_mut() {
+        for (_, instance) in instances.iter_mut() {
             let mut instance_events = instance.poll();
             for e in instance_events.drain(..) {
                 match e {
