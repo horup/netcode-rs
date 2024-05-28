@@ -136,7 +136,9 @@ impl<T: common::SerializableMessage> Server<T> {
                                                     Ok(msg) =>{
                                                         let _ = event_sender.send(InternalEvent::Message { client_id, msg, len });
                                                     },
-                                                    Err(_) => todo!(),
+                                                    Err(_) => {
+                                                        break;
+                                                    },
                                                 }
                                             }
                                         },
