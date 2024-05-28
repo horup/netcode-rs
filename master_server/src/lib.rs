@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ops::{Deref, DerefMut}};
+use std::collections::HashMap;
 use common::SerializableMessage;
 use server::{ClientId, Event, Server};
 
@@ -48,7 +48,7 @@ impl<T:SerializableMessage, I:Instance<T>> MasterServer<T, I> {
 
     /// Removes the given instance.
     /// 
-    /// Will move all clients from the instance
+    /// Will force leave all clients from the instance 
     pub fn remove_instance(&mut self, instance_id:InstanceId) -> Option<I> {
         let client_instances = self.client_instances.clone();
         for (client_id, instance_id2) in client_instances.iter() {
@@ -71,6 +71,9 @@ impl<T:SerializableMessage, I:Instance<T>> MasterServer<T, I> {
     pub fn leave_instance(&mut self, client_id:ClientId) -> Option<InstanceId> {
         match self.client_instances.remove(&client_id) {
             Some(iid) => {
+                if let Some(instance) = self.instances.get_mut(&iid) {
+                    instance.tx(InstanceEvent::ClientLeftInstance { client_id: client_id.to_owned() });
+                }
                 self.events.push(MasterEvent::ClientLeftInstance { client_id: client_id, instance_id: iid });
                 return Some(iid);
             },
@@ -114,11 +117,23 @@ impl<T:SerializableMessage, I:Instance<T>> MasterServer<T, I> {
             }
         }
 
+        // process events for a given client depending upon if the client is part of an instance or not
         let mut process_event = |e, client_id| {
             match self.client_instance(client_id) {
                 Some(instance_id) => {
                     let Some(instance) = instances.get_mut(&instance_id) else { return };
-                    instance.tx(e);
+                    match e {
+                        Event::ClientConnected { .. } => {
+                        },
+                        Event::ClientDisconnected { client_id } => {
+                            let _ = self.leave_instance(client_id);
+                            master_events.push(MasterEvent::ClientDisconnected { client_id });
+                        },
+                        Event::Message { client_id, msg } => {
+                            instance.tx(InstanceEvent::Message { client_id: client_id, msg: msg });
+                        },
+                    }
+                   // instance.tx(e);
                 },
                 None => {
                     match e {
@@ -155,11 +170,11 @@ impl<T:SerializableMessage, I:Instance<T>> MasterServer<T, I> {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, PartialOrd, Hash, Eq)]
+#[derive(Clone, Copy, PartialEq, PartialOrd, Hash, Eq, Debug)]
 pub struct InstanceId(u64);
 pub trait Instance<T:SerializableMessage> {
     /// send `Event` into the instance
-    fn tx(&mut self, t:Event<T>);
+    fn tx(&mut self, t:InstanceEvent<T>);
 
     /// poll the `Instance`, producing x number of events that needs to be processed
     fn poll(&mut self) -> Vec<InstanceEvent<T>>;

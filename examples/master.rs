@@ -1,7 +1,7 @@
 //! example with a master server, some instances and some clients
 use std::time::Duration;
 
-use master_server::MasterServer;
+use master_server::{InstanceEvent, MasterEvent, MasterServer};
 
 #[derive(Serialize, Deserialize, Clone)]
 enum Msg {
@@ -9,21 +9,21 @@ enum Msg {
 
 #[derive(Default)]
 struct Instance { 
-    pub tx:Vec<Event<Msg>>,
-    pub rx:Vec<Event<Msg>>
+    pub tx:Vec<InstanceEvent<Msg>>,
+    pub rx:Vec<InstanceEvent<Msg>>
 }
 impl master_server::Instance<Msg> for Instance {
-    fn tx(&mut self, t:Event<Msg>) {
+    fn tx(&mut self, t:InstanceEvent<Msg>) {
         self.tx.push(t);
     }
 
-    fn poll(&mut self) -> Vec<Event<Msg>> {
+    fn poll(&mut self) -> Vec<InstanceEvent<Msg>> {
         std::mem::take(&mut self.rx)
     }
 }
 
 use serde::{Deserialize, Serialize};
-use server::{Event, Server};
+use server::Server;
 #[tokio::main]
 async fn main() {
     let server = async {
@@ -35,14 +35,19 @@ async fn main() {
             let events = master_server.poll();
             for e in events {
                 match e {
-                    Event::ClientConnected { client_id } => {
+                    MasterEvent::ClientConnected { client_id } => {
+                        println!("{:?} connected", client_id);
                     },
-                    Event::ClientDisconnected { client_id } => {
-
+                    MasterEvent::ClientDisconnected { client_id } => {
+                        println!("{:?} disconnceted", client_id);
                     },
-                    Event::Message { client_id, msg } => {
-                        
+                    MasterEvent::ClientLeftInstance { client_id, instance_id } => {
+                        println!("{:?} left instance {:?}", client_id, instance_id);
                     },
+                    MasterEvent::ClientJoinedInstance { client_id, instance_id } => {
+                        println!("{:?} joined instance {:?}", client_id, instance_id);
+                    },
+                    MasterEvent::Message { .. } => {},
                 }
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
