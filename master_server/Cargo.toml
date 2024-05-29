@@ -6,4 +6,5 @@ edition = "2021"
 [dependencies]
 server ={ path = "../server" }
 common ={ path = "../common" }
+serde.workspace = true
 tokio.workspace = true

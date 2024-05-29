@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use common::SerializableMessage;
+use serde::{Deserialize, Serialize};
 use server::{ClientId, Event, Server};
 
 #[derive(Clone)]
@@ -179,7 +180,7 @@ impl<T:SerializableMessage, I:Instance<T>> MasterServer<T, I> {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, PartialOrd, Hash, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, PartialOrd, Hash, Eq, Debug, Serialize, Deserialize)]
 pub struct InstanceId(u64);
 pub trait Instance<T:SerializableMessage> {
     /// send `Event` into the instance

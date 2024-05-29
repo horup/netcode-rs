@@ -488,6 +488,7 @@ name = "master_server"
 version = "0.1.0"
 dependencies = [
  "common",
+ "serde",
  "server",
  "tokio",
 ]

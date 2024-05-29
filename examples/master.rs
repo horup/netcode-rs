@@ -5,8 +5,12 @@ use master_server::{InstanceEvent, InstanceId, MasterEvent, MasterServer};
 
 #[derive(Serialize, Deserialize, Clone)]
 enum Msg {
-    Hello
+    Create,
+    ListInstances,
+    Join(InstanceId),
+    Chat(String)
 }
+
 #[derive(Clone)]
 struct Instance { 
     pub id:Rc<InstanceId>,
@@ -61,7 +65,7 @@ async fn main() {
                 match e {
                     MasterEvent::ClientConnected { client_id } => {
                         println!("{:?} connected", client_id);
-                        master_server.send(client_id, Msg::Hello);
+                        master_server.send(client_id, Msg::Chat("hello from server".to_owned()));
                     },
                     MasterEvent::ClientDisconnected { client_id } => {
                         println!("{:?} disconnceted", client_id);
@@ -74,14 +78,26 @@ async fn main() {
                     },
                     MasterEvent::Message { client_id, msg } => {
                         match msg {
-                            Msg::Hello => {
+                            Msg::Create => {
                                 let instance_id: InstanceId = master_server.push_instance(|id|{
                                     let instance = Instance { id:id.into(), tx: Default::default(), rx: Default::default() };
                                     instances.push(instance.clone());
                                     instance
                                 });
-                                master_server.join_instance(client_id, instance_id);
+                                master_server.send(client_id, Msg::Chat(format!("{:?} instance was created", instance_id)));
                             },
+                            Msg::Join(id) => {
+                                master_server.join_instance(client_id, id);
+                            },
+                            Msg::ListInstances => {
+                                let mut ins = Vec::new();
+                                for instance in instances.iter() {
+                                    ins.push(instance.id.clone());
+                                }
+                                let s = format!("instances you can join: {:?}", ins);
+                                master_server.send(client_id, Msg::Chat(s));
+                            }
+                            _=> {}
                         }
                     },
                 }
